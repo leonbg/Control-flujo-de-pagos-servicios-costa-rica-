@@ -328,7 +328,7 @@ export default function ImportView({
 
         <button
           type="button"
-          onClick={downloadTemplateExcel}
+          onClick={() => void downloadTemplateExcel()}
           className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg transition-colors whitespace-nowrap shrink-0 self-start sm:self-auto cursor-pointer"
         >
           <Download className="w-3.5 h-3.5" />

@@ -1,4 +1,5 @@
-import * as XLSX from 'xlsx';
+import { readSheet } from 'read-excel-file/browser';
+import writeXlsxFile, { type SheetData } from 'write-excel-file/browser';
 import type {
   PaymentCategory,
   PaymentMethod,
@@ -64,13 +65,14 @@ export function parseDateValue(raw: unknown): string {
     return toISODateLocal(raw);
   }
   if (typeof raw === 'number' && raw > 20000 && raw < 80000) {
-    // Excel serial date
-    const parsed = XLSX.SSF.parse_date_code(raw);
-    if (parsed) {
-      const y = parsed.y;
-      const m = String(parsed.m).padStart(2, '0');
-      const d = String(parsed.d).padStart(2, '0');
-      return `${y}-${m}-${d}`;
+    // Excel 1900 serial date (epoch 1899-12-30 UTC)
+    const utcMs = Date.UTC(1899, 11, 30) + Math.floor(raw) * 86_400_000;
+    const d = new Date(utcMs);
+    if (!Number.isNaN(d.getTime())) {
+      const y = d.getUTCFullYear();
+      const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(d.getUTCDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
     }
   }
 
@@ -284,17 +286,8 @@ export async function parseSpreadsheetFile(file: File): Promise<ImportedDraft[]>
     return parseDelimitedText(text);
   }
 
-  const buffer = await file.arrayBuffer();
-  const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
-  const firstSheetName = workbook.SheetNames[0];
-  if (!firstSheetName) return [];
-  const sheet = workbook.Sheets[firstSheetName];
-  const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
-    header: 1,
-    defval: '',
-    raw: true,
-  });
-  return rowsToDrafts(rows);
+  const rows = await readSheet(file);
+  return rowsToDrafts(rows as unknown[][]);
 }
 
 export function parseDelimitedText(text: string): ImportedDraft[] {
@@ -448,8 +441,9 @@ export function captureVideoFrame(video: HTMLVideoElement): {
   return { base64, mimeType: 'image/jpeg', previewUrl: dataUrl };
 }
 
-export function downloadTemplateExcel() {
-  const rows = [
+export async function downloadTemplateExcel(): Promise<void> {
+  const today = getTodayISO();
+  const rows: SheetData = [
     [
       'Concepto',
       'Proveedor',
@@ -466,7 +460,7 @@ export function downloadTemplateExcel() {
       'Servicio Eléctrico (CNFL)',
       'Compañía Nacional de Fuerza y Luz (CNFL)',
       34800,
-      getTodayISO(),
+      today,
       'services',
       'monthly',
       'debit_card',
@@ -478,7 +472,7 @@ export function downloadTemplateExcel() {
       'Internet Fibra Óptica',
       'Kölbi (ICE)',
       29900,
-      getTodayISO(),
+      today,
       'services',
       'monthly',
       'direct_debit',
@@ -490,7 +484,7 @@ export function downloadTemplateExcel() {
       'Mensualidad Colegio',
       'Colegio La Salle Costa Rica',
       215000,
-      getTodayISO(),
+      today,
       'tuition',
       'monthly',
       'transfer',
@@ -500,8 +494,7 @@ export function downloadTemplateExcel() {
     ],
   ];
 
-  const ws = XLSX.utils.aoa_to_sheet(rows);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Obligaciones');
-  XLSX.writeFile(wb, 'plantilla-flujopago.xlsx');
+  await writeXlsxFile(rows, { sheet: 'Obligaciones' }).toFile(
+    'plantilla-flujopago.xlsx'
+  );
 }

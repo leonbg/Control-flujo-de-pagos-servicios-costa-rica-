@@ -104,8 +104,11 @@ export default defineConfig(() => {
             if (id.includes('node_modules/firebase') || id.includes('node_modules/@firebase')) {
               return 'firebase-vendor';
             }
-            if (id.includes('node_modules/xlsx')) {
-              return 'xlsx-vendor';
+            if (
+              id.includes('node_modules/read-excel-file') ||
+              id.includes('node_modules/write-excel-file')
+            ) {
+              return 'excel-vendor';
             }
           },
         },

@@ -12,7 +12,39 @@ const PORT = Number(process.env.PORT) || 3000;
 const IS_PROD = process.env.NODE_ENV === 'production';
 
 const app = express();
-app.use(express.json({ limit: '10mb' }));
+app.disable('x-powered-by');
+app.use(express.json({ limit: '6mb' }));
+
+const ALLOWED_IMAGE_MIMES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+]);
+const MAX_TEXT_LENGTH = 50_000;
+const MAX_IMAGE_BASE64_LENGTH = 6_000_000;
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX_REQUESTS = 20;
+const rateLimitBuckets = new Map<string, { count: number; resetAt: number }>();
+
+function isRateLimited(clientKey: string): boolean {
+  const now = Date.now();
+  const bucket = rateLimitBuckets.get(clientKey);
+  if (!bucket || now >= bucket.resetAt) {
+    rateLimitBuckets.set(clientKey, {
+      count: 1,
+      resetAt: now + RATE_LIMIT_WINDOW_MS,
+    });
+    if (rateLimitBuckets.size > 1000) {
+      for (const [key, val] of rateLimitBuckets.entries()) {
+        if (now >= val.resetAt) rateLimitBuckets.delete(key);
+      }
+    }
+    return false;
+  }
+  bucket.count += 1;
+  return bucket.count > RATE_LIMIT_MAX_REQUESTS;
+}
 
 function getAiClient(): GoogleGenAI | null {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -87,21 +119,38 @@ const EXTRACT_SCHEMA = {
 };
 
 app.post('/api/extract-payments', async (req, res) => {
-  const ai = getAiClient();
-  if (!ai) {
-    res.status(503).json({
-      error:
-        'Falta configurar GEMINI_API_KEY en el entorno del servidor para analizar fotos o texto libre.',
+  const clientIp =
+    (typeof req.headers['x-forwarded-for'] === 'string'
+      ? req.headers['x-forwarded-for'].split(',')[0]?.trim()
+      : '') ||
+    req.socket.remoteAddress ||
+    'unknown';
+
+  if (isRateLimited(clientIp)) {
+    res.status(429).json({
+      error: 'Demasiadas solicitudes de análisis. Espera un minuto e intenta de nuevo.',
     });
     return;
   }
 
-  const { text, imageBase64, mimeType, todayISO } = req.body as {
-    text?: string;
-    imageBase64?: string;
-    mimeType?: string;
-    todayISO?: string;
-  };
+  const ai = getAiClient();
+  if (!ai) {
+    res.status(503).json({
+      error:
+        'El servicio de análisis no está configurado en el servidor.',
+    });
+    return;
+  }
+
+  const body =
+    typeof req.body === 'object' && req.body !== null
+      ? (req.body as Record<string, unknown>)
+      : {};
+  const text = typeof body.text === 'string' ? body.text.trim() : '';
+  const imageBase64 =
+    typeof body.imageBase64 === 'string' ? body.imageBase64.trim() : '';
+  const mimeType = typeof body.mimeType === 'string' ? body.mimeType.trim() : '';
+  const todayISO = typeof body.todayISO === 'string' ? body.todayISO.trim() : '';
 
   if (!text && !imageBase64) {
     res.status(400).json({
@@ -110,8 +159,33 @@ app.post('/api/extract-payments', async (req, res) => {
     return;
   }
 
+  if (text.length > MAX_TEXT_LENGTH) {
+    res.status(400).json({
+      error: 'El texto enviado excede el límite permitido (50,000 caracteres).',
+    });
+    return;
+  }
+
+  if (imageBase64) {
+    if (
+      imageBase64.length > MAX_IMAGE_BASE64_LENGTH ||
+      !/^[A-Za-z0-9+/=]+$/.test(imageBase64)
+    ) {
+      res.status(400).json({
+        error: 'La imagen enviada no es válida o excede el tamaño máximo permitido.',
+      });
+      return;
+    }
+    if (mimeType && !ALLOWED_IMAGE_MIMES.has(mimeType)) {
+      res.status(400).json({
+        error: 'Formato de imagen no compatible. Usa JPG, PNG o WebP.',
+      });
+      return;
+    }
+  }
+
   const referenceDate =
-    typeof todayISO === 'string' && /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(todayISO)
+    /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(todayISO)
       ? todayISO
       : new Date().toISOString().slice(0, 10);
 
@@ -135,10 +209,9 @@ app.post('/api/extract-payments', async (req, res) => {
     > = [];
 
     if (imageBase64) {
-      const safeMime =
-        typeof mimeType === 'string' && mimeType.startsWith('image/')
-          ? mimeType
-          : 'image/jpeg';
+      const safeMime = ALLOWED_IMAGE_MIMES.has(mimeType)
+        ? mimeType
+        : 'image/jpeg';
       parts.push({
         inlineData: {
           mimeType: safeMime,
@@ -170,12 +243,15 @@ app.post('/api/extract-payments', async (req, res) => {
 
     res.json({ items });
   } catch (err) {
-    const message =
-      err instanceof Error ? err.message : 'Error al procesar con Gemini.';
-    const status = message.includes('429') || message.includes('RESOURCE_EXHAUSTED')
-      ? 429
-      : 500;
-    res.status(status).json({ error: message });
+    console.error('Error in /api/extract-payments:', err);
+    const rawMsg = err instanceof Error ? err.message : '';
+    const isQuota =
+      rawMsg.includes('429') || rawMsg.includes('RESOURCE_EXHAUSTED');
+    res.status(isQuota ? 429 : 500).json({
+      error: isQuota
+        ? 'Se alcanzó temporalmente el límite de análisis. Intenta nuevamente en unos minutos.'
+        : 'No se pudo completar el análisis en este momento. Intenta con una imagen más nítida o archivo CSV/Excel.',
+    });
   }
 });
 
