@@ -1,0 +1,6 @@
+{
+  "name": "FlujoPago",
+  "description": "Organizador de flujo de pagos para servicios, rentas, colegiaturas y obligaciones recurrentes.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

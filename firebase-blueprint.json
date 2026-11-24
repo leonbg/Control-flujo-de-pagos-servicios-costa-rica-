@@ -1,0 +1,229 @@
+{
+  "entities": {
+    "UserSettings": {
+      "title": "UserSettings",
+      "description": "User workspace preferences and root ownership gate for synced payment data.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID matching the document ID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "currency": {
+          "type": "string",
+          "enum": ["CRC", "USD", "EUR"],
+          "description": "Preferred display currency code."
+        },
+        "language": {
+          "type": "string",
+          "enum": ["es", "en"],
+          "description": "Preferred interface language."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server last-updated timestamp."
+        }
+      },
+      "required": ["uid", "currency", "language", "createdAt", "updatedAt"]
+    },
+    "PaymentRule": {
+      "title": "PaymentRule",
+      "description": "Scheduled or recurring payment obligation (rent, tuition, utility service, subscription).",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the owner.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "description": "Payment concept name.",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "payee": {
+          "type": "string",
+          "description": "Payee, landlord, school, or service provider.",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "category": {
+          "type": "string",
+          "enum": ["rent", "tuition", "services", "subscriptions", "other"],
+          "description": "Obligation category."
+        },
+        "amount": {
+          "type": "number",
+          "description": "Scheduled or estimated payment amount."
+        },
+        "dueDate": {
+          "type": "string",
+          "description": "Next due date in local YYYY-MM-DD format.",
+          "minLength": 10,
+          "maxLength": 10,
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        },
+        "recurrence": {
+          "type": "string",
+          "enum": ["one_time", "monthly", "bimonthly", "quarterly", "semester", "annual"],
+          "description": "Billing cycle cadence."
+        },
+        "method": {
+          "type": "string",
+          "enum": ["transfer", "credit_card", "debit_card", "cash", "direct_debit"],
+          "description": "Payment method."
+        },
+        "autopay": {
+          "type": "boolean",
+          "description": "Whether payment is charged automatically."
+        },
+        "paused": {
+          "type": "boolean",
+          "description": "Whether the obligation is temporarily paused."
+        },
+        "reference": {
+          "type": "string",
+          "description": "Optional contract, lease, or account reference.",
+          "maxLength": 100
+        },
+        "notes": {
+          "type": "string",
+          "description": "Optional notes.",
+          "maxLength": 500
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server last-updated timestamp."
+        }
+      },
+      "required": [
+        "ownerId",
+        "title",
+        "payee",
+        "category",
+        "amount",
+        "dueDate",
+        "recurrence",
+        "method",
+        "autopay",
+        "paused",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "PaymentLog": {
+      "title": "PaymentLog",
+      "description": "Immutable record of a settled payment transaction.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the owner.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ruleId": {
+          "type": "string",
+          "description": "Optional ID of the source PaymentRule.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "description": "Payment concept name.",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "payee": {
+          "type": "string",
+          "description": "Payee or provider.",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "category": {
+          "type": "string",
+          "enum": ["rent", "tuition", "services", "subscriptions", "other"],
+          "description": "Obligation category."
+        },
+        "amountPaid": {
+          "type": "number",
+          "description": "Actual settled amount."
+        },
+        "dueDate": {
+          "type": "string",
+          "description": "Original due date in YYYY-MM-DD format.",
+          "minLength": 10,
+          "maxLength": 10,
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        },
+        "paidDate": {
+          "type": "string",
+          "description": "Actual settlement date in YYYY-MM-DD format.",
+          "minLength": 10,
+          "maxLength": 10,
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        },
+        "method": {
+          "type": "string",
+          "enum": ["transfer", "credit_card", "debit_card", "cash", "direct_debit"],
+          "description": "Payment method used."
+        },
+        "notes": {
+          "type": "string",
+          "description": "Optional settlement notes.",
+          "maxLength": 500
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        }
+      },
+      "required": [
+        "ownerId",
+        "title",
+        "payee",
+        "category",
+        "amountPaid",
+        "dueDate",
+        "paidDate",
+        "method",
+        "createdAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserSettings" },
+      "description": "Per-user workspace preferences document."
+    },
+    "/users/{userId}/rules/{ruleId}": {
+      "schema": { "$ref": "#/entities/PaymentRule" },
+      "description": "User-owned recurring and scheduled payment obligations."
+    },
+    "/users/{userId}/logs/{logId}": {
+      "schema": { "$ref": "#/entities/PaymentLog" },
+      "description": "User-owned settled payment history records."
+    }
+  }
+}
